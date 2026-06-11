@@ -1,0 +1,27 @@
+# Memory images — never commit evidence (large + potentially contains live malware)
+images/*
+!images/README.md
+
+# Generated evidence packs
+evidence/*
+!evidence/.gitkeep
+
+# Secrets
+.env
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Volatility symbol cache (auto-downloaded, large)
+symbols/
+*.pdb
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
