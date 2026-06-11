@@ -37,14 +37,14 @@ that separation is by design.
 ```bash
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-vol -h                                   # verify Volatility 3
+vol --help                               # verify Volatility 3 (2.28.0+)
 
 # full pipeline: hash -> detect OS -> plugins -> evidence pack -> IOCs -> report
-python -m src.cli analyze images/<image>
+python3 -m src.cli analyze images/<image>
 
 # re-run pieces against an existing evidence pack
-python -m src.cli iocs   evidence/<pack>
-python -m src.cli report evidence/<pack> --case-name "Case 03"
+python3 -m src.cli iocs   evidence/<pack>
+python3 -m src.cli report evidence/<pack> --case-name "Case 03"
 
 pytest                                    # 10 tests on the IOC heuristics
 ```
@@ -87,7 +87,8 @@ replayed and checked — the difference between "trust me" and evidence.
 |------|----------|----------------|
 | [01 — Cridex banking trojan](docs/investigations/case-01-cridex-banking-trojan.md) | Commodity malware on XP: masquerading, injection into explorer.exe, run-key persistence, HTTP C2 | T1036.005, T1055, T1547.001, T1071.001 |
 | [02 — DumpMe Meterpreter intrusion](docs/investigations/case-02-dumpme-meterpreter-intrusion.md) | Interactive attacker on Win7: random-named payload, reflective loading, internal C2 on :4444, data access | T1204.002, T1620, T1571, T1005 |
-| 03 — Credential theft | Planned (lsass/hashdump scenario → T1003) | — |
+| [03 — HFS exploitation / RAT deployment](docs/investigations/case-03-hfs-exploitation-triage.md) | CVE-2014-6287 → VBS dropper → UWkpjFjDzM.exe → injection into 14 processes; SMTP exfil candidates | T1190, T1059.005, T1055, T1036, T1114, T1048.003 |
+| 04 — Credential theft | Planned (lsass/hashdump scenario → T1003) | — |
 
 See [`docs/investigations/README.md`](docs/investigations/README.md) for
 report status and the validation workflow, and

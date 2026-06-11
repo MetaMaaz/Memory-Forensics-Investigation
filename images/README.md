@@ -9,4 +9,4 @@ in your own lab. See `RESOURCES` section of the main README for sources.
 
 | Image file | Source | SHA256 |
 |------------|--------|--------|
-| _(add yours here)_ | | |
+| `Triage-Memory.mem` | CyberDefenders — "DumpMe" blue-team challenge | `a18602964abfbc54e1c83ebdaa61638ff3c2251485e4ad684fc9b59d43dd04a8` |

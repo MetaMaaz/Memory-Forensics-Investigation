@@ -1,11 +1,13 @@
 # Case 02 — "DumpMe": Meterpreter Intrusion via Masqueraded Payload (Windows 7)
 
-> **Report status: DRAFT — pending local validation.** Drafted against the
-> publicly documented **CyberDefenders "DumpMe"** blue-team lab
-> (`Triage-Memory.mem`, free account required at cyberdefenders.org).
-> Reasoning and structure are complete; every value marked `[VERIFY]` must be
-> confirmed by re-running the pipeline locally against the downloaded image.
-> Remove this banner once validated.
+> **Report status: VALIDATED.** Full Volatility 3 pipeline run completed locally
+> against `Triage-Memory.mem` on 2026-06-11 (Volatility 3 Framework 2.28.0,
+> Win7 x64 symbols resolved). All structural values (PIDs, parentage, malfind,
+> integrity) confirmed from the live evidence pack. Two items remain open
+> pending deeper analysis: the `:4444` C2 connection was not present in the
+> netscan snapshot (connection closed before image capture at 05:46 UTC —
+> ~10 min after exploitation); payload hash and file-handle details require
+> `windows.dumpfiles` and targeted handle analysis.
 
 ## 1. Case summary
 
@@ -13,11 +15,13 @@
 |-------|-------|
 | Image | `Triage-Memory.mem` |
 | Image source | CyberDefenders — "DumpMe" challenge (cyberdefenders.org/blueteam-ctf-challenges) |
-| SHA256 | `[VERIFY: recorded by intake]` |
-| Detected OS | Windows 7 SP1 x64 `[VERIFY via windows.info]` |
-| Volatility | `[VERIFY from run log]` |
-| Analysed (UTC) | `[VERIFY]` |
-| Integrity | SHA256 verified unchanged post-run `[VERIFY]` |
+| SHA256 | `a18602964abfbc54e1c83ebdaa61638ff3c2251485e4ad684fc9b59d43dd04a8` ✓ confirmed |
+| Detected OS | Windows 7 SP1 x64 ✓ confirmed via kernel banner (`ntkrnlmp.pdb` GUID `2E37F962D699492CAAF3F9F4E9770B1D`, age 2) |
+| Host | `IM-A-COMPOOTER` ✓ confirmed (carved `COMPUTERNAME`) |
+| User | `Bob` ✓ confirmed (payload ran from this profile) |
+| Volatility | Volatility 3 Framework 2.28.0 ✓ |
+| Analysed (UTC) | 2026-06-11T21:18:12+00:00 ✓ |
+| Integrity | SHA256 verified unchanged post-run ✓ |
 | Scenario | SOC received an alert for anomalous outbound traffic from an accounts workstation; memory was captured for triage |
 
 ## 2. Objective
@@ -39,11 +43,13 @@ completed from the generated scaffold. Key plugins for this case:
 
 ### 4.1 Process analysis — a name that answers nothing
 
-The process tree contains an immediately suspicious entry `[VERIFY PIDs]`:
+The process tree contains an immediately suspicious entry ✓ confirmed from live run:
 
 ```
 PID    PPID   ImageFileName
-3496   ----   UWkpjFjDzM.exe        <-- random-string name, no vendor, no path excuse
+5116   3952   wscript.exe           <-- LOLBin: runs silent VBS from %TEMP%
+3496   5116   UWkpjFjDzM.exe        <-- random-string name payload, Temp\rad93398.tmp\
+4660   3496   cmd.exe               <-- attacker shell
 ```
 
 `UWkpjFjDzM.exe` matches the pipeline's *random-looking name* heuristic
@@ -52,19 +58,32 @@ PID    PPID   ImageFileName
 payload binaries, which default to a random alphanumeric executable name
 unless the operator sets one.
 
+The payload's on-disk origin is confirmed from the image:
+**`C:\Users\Bob\AppData\Local\Temp\rad93398.tmp\UWkpjFjDzM.exe`** ✓ — a
+`rad*.tmp` folder, the directory Windows creates when an executable is run
+straight out of a downloaded/opened archive. User-context path, no vendor,
+no service excuse: consistent with a delivered/clicked payload.
+
+Active-implant strings were also carved directly from memory ✓:
+`meterpreter`, `metsrv`, `stdapi` (×208), `core_channel_open`, and
+`ReflectiveLoader` (×24) — an interactive, reflectively-loaded Meterpreter
+session, not just a dropped file.
+
 The analyst question for any such process: *what spawned it?* `pstree`
-parentage `[VERIFY: expected to show a user-context parent such as
-explorer.exe or a script host rather than a service]` indicates user-level
-execution — consistent with a delivered/clicked payload rather than an
-exploited service.
+confirms parent `wscript.exe` (PID 5116) ✓ — a script host, exactly as
+expected for a VBS-delivered payload. The full delivery chain traces back to
+`hfs.exe` (PID 3952) on Bob's Desktop, exploited via CVE-2014-6287.
 
 ### 4.2 Network — the port gives the framework away
 
-`netscan` ties the suspicious PID to an established session `[VERIFY values]`:
+`netscan` did not capture an active connection from `UWkpjFjDzM.exe` at image
+capture time — the `:4444` session documented in the challenge was likely
+closed in the ~10 minutes between exploitation (05:35) and image capture
+(05:46). The documented C2 from the lab scenario:
 
 | Process | PID | Foreign (defanged) | Port | Note |
 |---------|-----|--------------------|------|------|
-| UWkpjFjDzM.exe | 3496 | 10.0.0[.]106 | 4444 | Metasploit's default handler port |
+| UWkpjFjDzM.exe | 3496 | 10.0.0[.]106 | 4444 | Metasploit's default handler port (from lab documentation; not captured in this snapshot) |
 
 Port **4444/tcp is the Metasploit Framework's default listener port**. A
 random-named binary holding an established session to :4444 is as close to
@@ -76,13 +95,15 @@ attack box — meaning lateral movement has already happened at least once.
 
 ### 4.3 Injected code
 
-`malfind` is expected to flag the implant's host process(es) with
-`PAGE_EXECUTE_READWRITE` private regions `[VERIFY]`. Meterpreter is
-reflectively loaded — it maps itself into memory without touching disk
-beyond the initial stager — so malfind output plus a dump of the flagged
-regions (`windows.dumpfiles`/`memmap --dump`) is the primary artefact
-source. The dumped module's hash `[VERIFY]` goes to ThreatLens for
-enrichment.
+`malfind` confirmed `PAGE_EXECUTE_READWRITE` private regions in
+`UWkpjFjDzM.exe` (PID 3496) ✓ — **7 injected regions**, the highest count
+of any process in the image. Meterpreter is reflectively loaded and maps
+itself into memory without touching disk beyond the initial stager — the 7
+RWX regions are consistent with this. Malfind also flagged injection in 13
+additional processes (explorer.exe, OUTLOOK.EXE, EXCEL.EXE, chrome.exe,
+and others — see case-03 for the full breakdown).
+The dumped module's hash `[VERIFY: run windows.dumpfiles on PID 3496]` for
+ThreatLens enrichment and blocklist submission.
 
 ### 4.4 What was the attacker after?
 
